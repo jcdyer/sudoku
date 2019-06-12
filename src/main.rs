@@ -95,20 +95,20 @@ impl Board {
 
 impl fmt::Display for Board {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "\n")?;
+        writeln!(f)?;
         for (i, square) in self.squares.iter().enumerate() {
             match square {
                 Some(value) => write!(f, "{} ", value)?,
                 None => write!(f, "_ ")?,
             }
             if i % 9 == 8 {
-                write!(f, "\n")?;
+                writeln!(f)?;
             } else if i % 3 == 2 {
-                write!(f, "  ")?;
+                writeln!(f, "  ")?;
             }
 
             if i % 27 == 26 {
-                write!(f, "\n")?;
+                writeln!(f)?;
             }
         }
         Ok(())
@@ -289,10 +289,11 @@ fn run(board: &Board, worker: &mut Worker) -> Option<Board> {
 
 #[cfg(test)]
 mod tests {
-    use super::{next, Board, Value::*};
+    use super::{next, Board, Value::*, Worker};
 
     #[test]
     fn test_next() {
+        let mut worker = Worker::new();
         #[rustfmt::skip]
         let board = Board::new(vec![
             Some(N1),Some(N2),Some(N3),Some(N4),Some(N5),Some(N6),None,None,None,
@@ -329,10 +330,11 @@ mod tests {
             None,None,None,None,None,None,None,None,None,
             None,None,None,None,None,None,None,None,Some(N9),
         ]);
-        assert_eq!(next(&board), vec![expected1, expected2])
+        assert_eq!(next(&board, &mut worker), vec![expected1, expected2])
     }
     #[test]
     fn test_next_with_constrained_block() {
+        let mut worker = Worker::new();
         #[rustfmt::skip]
         let board = Board::new(vec![
             Some(N1),Some(N2),Some(N3),Some(N4),Some(N5),Some(N6),None,None,None,
@@ -357,6 +359,6 @@ mod tests {
             None,None,None,None,None,None,None,None,None,
             None,None,None,None,None,None,None,None,Some(N9),
         ]);
-        assert_eq!(next(&board), vec![expected1])
+        assert_eq!(next(&board, &mut worker), vec![expected1])
     }
 }
