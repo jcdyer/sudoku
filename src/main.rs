@@ -104,7 +104,7 @@ impl fmt::Display for Board {
             if i % 9 == 8 {
                 writeln!(f)?;
             } else if i % 3 == 2 {
-                writeln!(f, "  ")?;
+                write!(f, "  ")?;
             }
 
             if i % 27 == 26 {
@@ -116,29 +116,38 @@ impl fmt::Display for Board {
 }
 
 struct Worker {
-    buffer: Vec<Value>,
     available_values: Vec<Value>,
     block_offsets: BTreeMap<(u8, u8), Vec<usize>>,
+    rows: Vec<Vec<Value>>,
+    columns: Vec<Vec<Value>>,
+    blocks: BTreeMap<(u8, u8), Vec<Value>>,
 }
 
 impl Worker {
     fn new() -> Worker {
         use Value::*;
         let mut worker = Worker {
-            buffer: Vec::with_capacity(9),
             available_values: vec![N1, N2, N3, N4, N5, N6, N7, N8, N9],
             block_offsets: BTreeMap::new(),
+            rows: vec![vec![]; 9],
+            columns: vec![vec![]; 9],
+            blocks: BTreeMap::new(),
         };
         worker.calculate_block_offsets();
+        for row in 0..3 {
+            for col in 0..3 {
+                worker.blocks.insert((row, col), vec![]);
+            }
+        }
         worker
     }
 
-    fn possible(&mut self, board: &Board, position: u8) -> Vec<Value> {
+    fn possible(&mut self, position: u8) -> Vec<Value> {
         assert!(position < 81);
 
-        let possible_row = self.constrain_row(board, position);
-        let possible_column = self.constrain_column(board, position);
-        let possible_block = self.constrain_block(board, position);
+        let possible_row = self.check_constraint(self.rows.get(row(position) as usize).unwrap());
+        let possible_column = self.check_constraint(self.columns.get(column(position) as usize).unwrap());
+        let possible_block = self.check_constraint(self.blocks.get(&block(position)).unwrap());
         self.available_values
             .iter()
             .filter(|x| possible_row.contains(x))
@@ -148,41 +157,36 @@ impl Worker {
             .collect()
     }
 
-    fn constrain_row(&mut self, board: &Board, position: u8) -> Vec<Value> {
-        let row = row(position);
+    fn constrain_row(&mut self, board: &Board, row: usize) {
         assert!(row < 9);
 
-        self.buffer.truncate(0);
-        let start = row as usize * 9;
+        self.rows[row].truncate(0);
+        let start = row * 9;
         let end = start + 9;
         for pt in start..end {
             if let Some(val) = board.squares[pt] {
-                self.buffer.push(val);
+                self.rows[row].push(val);
             }
         }
+    }
+    fn check_constraint(&self, constraint: &[Value]) -> Vec<Value> {
         self.available_values
             .iter()
-            .filter(|x| !self.buffer.contains(*x))
+            .filter(|x| !constraint.contains(*x))
             .cloned()
             .collect()
     }
 
-    fn constrain_column(&mut self, board: &Board, position: u8) -> Vec<Value> {
-        let column = column(position);
+    fn constrain_column(&mut self, board: &Board, column: usize) {
         assert!(column < 9);
 
-        self.buffer.truncate(0);
+        self.columns[column].truncate(0);
         for i in 0..9 {
             let pt = i * 9 + column as usize;
             if let Some(val) = board.squares[pt] {
-                self.buffer.push(val);
+                self.columns[column].push(val);
             }
         }
-        self.available_values
-            .iter()
-            .filter(|x| !self.buffer.contains(*x))
-            .cloned()
-            .collect()
     }
 
     fn calculate_block_offsets(&mut self) {
@@ -206,25 +210,19 @@ impl Worker {
         }
     }
 
-    fn constrain_block(&mut self, board: &Board, position: u8) -> Vec<Value> {
-        let block = block(position);
+    fn constrain_block(&mut self, board: &Board, block: (u8, u8)) {
         assert!(block.0 < 3);
         assert!(block.1 < 3);
 
-        self.buffer.truncate(0);
+        self.blocks.get_mut(&block).unwrap().truncate(0);
 
         let offsets = self.block_offsets.get(&block).expect("offset map");
 
         for pt in offsets {
             if let Some(val) = board.squares[*pt] {
-                self.buffer.push(val);
+                self.blocks.get_mut(&block).unwrap().push(val);
             }
         }
-        self.available_values
-            .iter()
-            .filter(|x| !self.buffer.contains(*x))
-            .cloned()
-            .collect()
     }
 }
 
@@ -245,11 +243,20 @@ fn block(position: u8) -> (u8, u8) {
 
 fn next(board: &Board, worker: &mut Worker) -> Vec<Board> {
     use Value::*;
+    for offset in 0..9 {
+        worker.constrain_row(board, offset);
+        worker.constrain_column(board, offset);
+    }
+    for row in 0..3 {
+        for col in 0..3 {
+            worker.constrain_block(board, (row, col));
+        }
+    }
     let mut least_possible = vec![N1, N2, N3, N4, N5, N6, N7, N8, N9];
     let mut least_position: usize = 100;
     for (position, value) in board.squares.iter().enumerate() {
         if value.is_none() {
-            let poss = worker.possible(board, position as u8);
+            let poss = worker.possible(position as u8);
             if poss.len() < least_possible.len() {
                 least_possible = poss;
                 least_position = position;
